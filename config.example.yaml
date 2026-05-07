@@ -1,0 +1,124 @@
+# Daily Paper Agent — example configuration.
+# Copy this file to config.yaml and edit as needed.
+# DO NOT commit config.yaml (it is git-ignored).
+
+arxiv:
+  categories:
+    - cs.CV
+    - eess.IV
+    - cs.AI
+  max_results: 100        # papers fetched per run (before deduplication)
+
+research_interests:
+  topics:
+    - video frame interpolation
+    - video super-resolution
+    - reference-based video super-resolution
+    - sparse temporal context
+    - FOV/ROI asynchronous reconstruction
+    - capsule endoscopy
+    - telepathology WSI streaming
+    - ultrasound reconstruction
+  keywords:
+    - interpolation
+    - super-resolution
+    - upsampling
+    - frame synthesis
+    - temporal consistency
+    - sparse frames
+    - optical flow
+    - deformable convolution
+    - reference frame
+    - asynchronous
+    - field of view
+    - region of interest
+    - VFI
+    - VSR
+    - SR
+    - WCE
+    - WSI
+    - capsule
+    - endoscopy
+    - pathology
+    - ultrasound
+    - echocardiography
+    - whole slide
+
+semantic_scholar:
+  enabled: true
+  venues:
+    - CVPR
+    - ICLR
+    - NeurIPS
+    - ECCV
+    - ICCV
+    - AAAI
+    - MICCAI
+  max_results: 50
+  days_back: 60
+
+pubmed:
+  enabled: true
+  journals:
+    - "IEEE Transactions on Medical Imaging"
+    - "IEEE Transactions on Biomedical Engineering"
+    - "Medical Image Analysis"
+    - "Nature Biomedical Engineering"
+    - "Nature Methods"
+    - "Nature Medicine"
+    - "Medical Physics"
+  max_results: 30
+  days_back: 14
+
+llm:
+  # Set ANTHROPIC_API_KEY env var to enable LLM summaries.
+  # Leave blank or unset to use template-based fallback.
+  provider: anthropic        # anthropic | none
+  model: claude-haiku-4-5-20251001   # cheapest Claude for summaries
+
+output:
+  reports_dir: data/reports
+  analyses_dir: data/analyses
+  db_path: data/papers.db
+  log_path: logs/daily.log
+
+# ---------------------------------------------------------------------------
+# Deep analysis — used by: python -m src.analyze --arxiv-id XXXX
+# Requires ANTHROPIC_API_KEY to be set.
+# ---------------------------------------------------------------------------
+analysis:
+  provider: anthropic
+  model: claude-sonnet-4-6   # use a smarter model for deep analysis
+
+  # Set run_in_daily: true to automatically run deep analysis during daily batch.
+  # Only papers at or above min_priority will be analysed.
+  run_in_daily: false         # true | false
+  min_priority: Must Read     # Must Read | Worth Skim | Low Priority
+
+  # Each section is a chapter in the output.
+  # Customise the prompts to match your reading goals.
+  sections:
+    - name: 核心问题
+      prompt: >
+        这篇论文要解决的核心问题是什么？
+        研究背景和动机是什么？现有方法的局限性在哪里？
+
+    - name: 方法与贡献
+      prompt: >
+        作者提出了什么方法？关键技术创新点是什么？
+        主要贡献（技术贡献、实验贡献、理论贡献）有哪些？
+
+    - name: 方法深度解析
+      prompt: >
+        对方法进行深入技术解析：核心模块的工作原理是什么？
+        关键设计选择及其理由是什么？
+        与已有方法（如光流、可变形卷积、Transformer等）的主要区别是什么？
+        该方法在计算效率、泛化性、可训练性上的优劣如何？
+
+    - name: 研究洞见
+      prompt: >
+        结合以下研究方向，分析这篇文章的洞见和启发：
+        视频帧插值（VFI）、视频超分辨率（VSR）、参考帧VSR、
+        稀疏时序上下文、胶囊内窥镜、病理WSI流式传输、超声重建。
+        请具体说明：哪些技术思路或模块设计可以迁移借鉴？
+        有哪些潜在的实验设计启发？

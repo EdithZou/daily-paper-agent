@@ -1,0 +1,26 @@
+# Python
+.venv/
+.venv_paperagent/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Secrets (copy .env.example → .env locally)
+.env
+
+# Config (copy config.example.yaml → config.yaml locally)
+config.yaml
+
+# Data
+data/*.db
+data/reports/*.md
+data/analyses/*.md
+
+# Logs
+logs/*.log
+
+# Claude Code local settings
+.claude/settings.local.json
