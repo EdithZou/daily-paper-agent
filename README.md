@@ -222,6 +222,11 @@ In addition to the local Python CLI above, this repo ships a **cloud
 deployment** that lets anyone subscribe through a web form and receive a
 daily HTML email of ranked arXiv papers — no machine of their own needed.
 
+Real delivery, 2026-05-13 — 5 cs.CV papers ranked and summarized in Chinese
+by Claude Haiku 4.5, sent via Resend:
+
+![Daily arXiv email — 2026-05-13](docs/screenshots/daily-email-2026-05-13.png)
+
 ```
 web/ (static page) ──POST /api/subscribe──▶ backend/ (Cloudflare Worker + D1)
                                                   │
