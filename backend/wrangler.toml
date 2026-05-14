@@ -1,0 +1,15 @@
+name = "daily-paper-agent"
+main = "src/index.js"
+compatibility_date = "2025-05-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "daily-paper"
+database_id = "1aef8bed-d4e4-4138-9346-de0608b855c0"
+
+[vars]
+EMAIL_FROM = "Daily Paper <onboarding@resend.dev>"
+ALLOWED_ORIGIN = "*"

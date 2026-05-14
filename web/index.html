@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>每日 arXiv 论文订阅</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    input, textarea, select {
+      width: 100%;
+      border-radius: 0.375rem;
+      border: 1px solid rgb(203 213 225);
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      background: white;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: rgb(15 23 42);
+      box-shadow: 0 0 0 2px rgb(15 23 42 / 0.1);
+    }
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: rgb(51 65 85);
+      margin-bottom: 0.25rem;
+    }
+    .hint { font-size: 0.75rem; color: rgb(100 116 139); margin-top: 0.25rem; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-2xl mx-auto px-4 py-10">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold text-slate-900">每日 arXiv 论文订阅</h1>
+      <p class="mt-2 text-slate-600">配置一次，每天定时把感兴趣的新论文推送到邮箱、微信或 Telegram。</p>
+      <div id="backend-status" class="mt-3 text-xs px-3 py-2 rounded bg-amber-50 text-amber-800 border border-amber-200">
+        后端尚未部署，提交后将暂存浏览器本地，不会真的发送。
+      </div>
+    </header>
+
+    <form id="subscribe-form" class="space-y-6">
+      <section class="bg-white rounded-lg shadow-sm p-6 space-y-4">
+        <h2 class="text-lg font-semibold text-slate-900">接收方式</h2>
+        <div>
+          <label>邮箱 <span class="text-red-500">*</span></label>
+          <input type="email" name="email" required placeholder="you@example.com" />
+          <p class="hint">主推送通道，必填</p>
+        </div>
+        <details class="border-t border-slate-100 pt-3">
+          <summary class="cursor-pointer text-sm text-slate-700 select-none">添加其他推送通道（可选）</summary>
+          <div class="mt-3 space-y-3">
+            <div>
+              <label>Telegram Chat ID</label>
+              <input type="text" name="telegram_chat_id" placeholder="如：123456789" />
+              <p class="hint">先和 bot 发 /start，从 @userinfobot 拿到 ID</p>
+            </div>
+            <div>
+              <label>Server酱 SendKey（微信推送）</label>
+              <input type="text" name="serverchan_key" placeholder="SCT..." />
+              <p class="hint">在 sct.ftqq.com 扫码注册后获取，国内用户最稳</p>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="bg-white rounded-lg shadow-sm p-6 space-y-4">
+        <h2 class="text-lg font-semibold text-slate-900">订阅内容</h2>
+        <div>
+          <label>arXiv 分类 <span class="text-red-500">*</span></label>
+          <div id="category-chips" class="flex flex-wrap gap-2 mt-1"></div>
+          <p class="hint">至少选一个；点击切换</p>
+        </div>
+        <div>
+          <label>兴趣关键词</label>
+          <textarea name="keywords" rows="3" placeholder="例如：large language model, retrieval augmented generation, mechanistic interpretability"></textarea>
+          <p class="hint">逗号或换行分隔，用于排序加权（不会过滤掉无关键词的论文）</p>
+        </div>
+      </section>
+
+      <section class="bg-white rounded-lg shadow-sm p-6 space-y-4">
+        <h2 class="text-lg font-semibold text-slate-900">推送设置</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label>每日时间</label>
+            <input type="time" name="delivery_time" value="09:00" />
+          </div>
+          <div>
+            <label>时区</label>
+            <select name="timezone">
+              <option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</option>
+              <option value="UTC">UTC</option>
+              <option value="America/Los_Angeles">America/Los_Angeles</option>
+              <option value="America/New_York">America/New_York</option>
+              <option value="Europe/London">Europe/London</option>
+            </select>
+          </div>
+          <div>
+            <label>每日推送数量</label>
+            <input type="number" name="top_n" value="10" min="1" max="50" />
+          </div>
+          <div>
+            <label>摘要语言</label>
+            <select name="summary_lang">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+              <option value="none">不生成摘要</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <button type="submit" class="w-full bg-slate-900 text-white py-3 rounded-md hover:bg-slate-800 font-medium transition">
+        保存订阅
+      </button>
+    </form>
+
+    <footer class="mt-8 text-xs text-slate-500 text-center">
+      数据仅保存在你浏览器本地，未提交到任何服务器（后端部署后会换成订阅 API）。
+    </footer>
+
+    <div id="toast" class="hidden fixed bottom-6 right-6 px-4 py-3 rounded-md shadow-lg text-sm text-white z-50"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
