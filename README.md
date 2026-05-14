@@ -213,3 +213,165 @@ Check `logs/launchd.err.log` for errors. Common issues:
 | Notion integration | Notion API client in `src/notifier.py`; use paper fields as page properties |
 | Additional LLM providers | Extend `summarizer.py` with an `openai` branch |
 | More arXiv categories | Add to `arxiv.categories` in `config.yaml` |
+
+---
+
+## Hosted Mode — Web Frontend + Cloudflare Worker + Email Push
+
+In addition to the local Python CLI above, this repo ships a **cloud
+deployment** that lets anyone subscribe through a web form and receive a
+daily HTML email of ranked arXiv papers — no machine of their own needed.
+
+```
+web/ (static page) ──POST /api/subscribe──▶ backend/ (Cloudflare Worker + D1)
+                                                  │
+                                                  ▼ cron every minute
+                                          fetch arXiv → rank by keywords
+                                          → summarize via Claude Haiku
+                                          → email via Resend (+ optional
+                                            Telegram / Server酱)
+```
+
+### Layout
+
+| Path | Purpose |
+|------|---------|
+| `web/index.html`, `web/app.js` | Static subscription form (Tailwind via CDN). Posts to the Worker. |
+| `backend/src/index.js` | Worker entrypoint — HTTP routes + `scheduled()` cron handler |
+| `backend/src/routes.js` | `POST /api/subscribe`, `POST /api/unsubscribe`, `GET /api/health` |
+| `backend/src/scheduler.js` | Per-minute cron: matches `delivery_time` in each user's `timezone`, dispatches |
+| `backend/src/arxiv.js` | arXiv Atom fetch with 3-retry backoff and edge cache |
+| `backend/src/ranker.js` | Same keyword-weighted ranking as the Python CLI (title ×3, abstract ×1) |
+| `backend/src/summarizer.js` | Claude Haiku 4.5 summary in zh / en (skipped if `summary_lang == none`) |
+| `backend/src/push.js` | Email (Resend), Telegram, Server酱 senders |
+| `backend/src/render.js` | HTML email layout + Markdown for chat channels |
+| `backend/schema.sql` | D1 schema: `subscriptions` + `sends` (per-paper-per-channel dedup) |
+| `backend/wrangler.toml` | D1 binding, cron trigger, non-secret vars (`EMAIL_FROM`, `ALLOWED_ORIGIN`) |
+
+### Deploy the Worker
+
+Prereqs: a free Cloudflare account, a [Resend](https://resend.com) account
+for the email channel, and Node 18+.
+
+```bash
+cd backend
+npm install
+npx wrangler login
+```
+
+Create the D1 database and copy the returned `database_id` into
+`wrangler.toml` (`[[d1_databases]]`):
+
+```bash
+npx wrangler d1 create daily-paper
+npm run db:init           # apply schema.sql to remote D1
+```
+
+Set the runtime secrets (these are NOT committed and not in `wrangler.toml`):
+
+```bash
+npx wrangler secret put RESEND_API_KEY      # required for email
+npx wrangler secret put ANTHROPIC_API_KEY   # optional — enables zh/en summaries
+npx wrangler secret put TELEGRAM_BOT_TOKEN  # optional — only if Telegram users subscribe
+```
+
+Verify `wrangler.toml` has:
+
+```toml
+[triggers]
+crons = ["* * * * *"]   # every minute; scheduler filters by delivery_time
+
+[vars]
+EMAIL_FROM = "Daily Paper <onboarding@resend.dev>"   # change once you verify a domain in Resend
+ALLOWED_ORIGIN = "*"                                  # tighten to your Pages origin in prod
+```
+
+Deploy and tail logs:
+
+```bash
+npm run deploy
+npm run tail
+```
+
+### Deploy the Web Frontend
+
+The form is a single static HTML file — host it anywhere (Cloudflare Pages,
+GitHub Pages, Netlify). Before deploying, update one line in `web/app.js`:
+
+```js
+const API_BASE = 'https://daily-paper-agent.<your-subdomain>.workers.dev';
+```
+
+Cloudflare Pages (recommended, same account as the Worker):
+
+```bash
+npx wrangler pages deploy web --project-name daily-paper-web
+```
+
+For local preview just open `web/index.html` in a browser — the form will
+still POST to the deployed Worker.
+
+### How a Daily Email Is Built and Sent
+
+End-to-end flow when a subscriber's `delivery_time` ticks in their `timezone`:
+
+1. **Cron fires** (`* * * * *`) → `scheduled()` in `backend/src/index.js` runs
+   `runDailyPush(env)` (`scheduler.js:9`).
+2. **Match the minute** — for each row in `subscriptions WHERE active = 1`,
+   `isDeliveryMinute()` formats `now` in the subscriber's IANA timezone and
+   compares `HH:MM` to `delivery_time`. Non-matching subscriptions skip.
+3. **Fetch arXiv** (`arxiv.js`) — last 100 papers across the subscriber's
+   `categories`, with edge cache (`cf.cacheTtl: 600`) and retry on 429/5xx.
+4. **Freshness + dedup** — keep papers published in the last 36 h
+   (`FRESH_WINDOW_HOURS`), drop any `paper_id` already in `sends` for this
+   subscription.
+5. **Rank** (`ranker.js`) — keyword hits in title score 3, in abstract 1;
+   tiebreak by `published`; slice to `top_n`.
+6. **Summarize** (`summarizer.js`) — if `summary_lang` is `zh` or `en` and
+   `ANTHROPIC_API_KEY` is set, call Claude Haiku 4.5 for a 1–2 sentence
+   summary per paper. Falls back to no-summary if the key is missing or the
+   call fails.
+7. **Render the email** (`render.js → renderEmailHtml`) — inline-styled HTML
+   list (one `<li>` per paper with title link, authors, summary, categories).
+8. **Send** (`push.js → pushEmail`) — `POST https://api.resend.com/emails`
+   with `from = EMAIL_FROM`, `to = sub.email`, subject
+   `每日 arXiv · YYYY-MM-DD · N 篇`, body = the rendered HTML. The optional
+   Telegram and Server酱 channels go out in parallel from the same loop.
+9. **Record dispatch** — one row per `(subscription_id, paper_id, channel)`
+   in `sends` with `status = 'ok' | 'fail'` and any error message. The UNIQUE
+   index guarantees the same paper never re-sends on the same channel.
+
+### Email Provider Setup (Resend)
+
+1. Create a free Resend account; verify your sending domain (or just use
+   the sandbox `onboarding@resend.dev` to test — deliverability is poor).
+2. Create an API key with **Sending** scope.
+3. `npx wrangler secret put RESEND_API_KEY` in `backend/`.
+4. Edit `wrangler.toml` → `EMAIL_FROM = "Daily Paper <noreply@yourdomain>"`
+   (must match a verified Resend domain) → `npm run deploy`.
+
+### Local Dev for the Worker
+
+```bash
+cd backend
+echo 'RESEND_API_KEY = "re_test_..."' > .dev.vars         # git-ignored
+echo 'ANTHROPIC_API_KEY = "sk-ant-..."' >> .dev.vars
+npm run db:init-local
+npm run dev          # http://localhost:8787
+```
+
+Trigger the scheduled handler manually:
+
+```bash
+curl 'http://localhost:8787/__scheduled?cron=*+*+*+*+*'
+```
+
+### Security & Privacy Notes
+
+- Subscribers' emails live only in your Cloudflare D1 database; nothing is
+  shared with the Python CLI side or written to this repo.
+- `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN` are stored as
+  Worker secrets (`wrangler secret put`), never in `wrangler.toml` or git.
+- `wrangler.toml`'s `database_id` is safe to commit — it is not a credential
+  per [Cloudflare docs](https://developers.cloudflare.com/d1/).
+- Tighten `ALLOWED_ORIGIN` to your Pages URL before going public.
