@@ -8,11 +8,18 @@ export function rankPapers(papers, keywords, topN) {
     const title = (p.title || '').toLowerCase();
     const abs = (p.summary || '').toLowerCase();
     let score = 0;
+    const matches = [];
     for (const k of kw) {
-      if (title.includes(k)) score += 3;
-      if (abs.includes(k)) score += 1;
+      if (title.includes(k)) {
+        score += 3;
+        matches.push({ keyword: k, where: 'title' });
+      }
+      if (abs.includes(k)) {
+        score += 1;
+        matches.push({ keyword: k, where: 'abstract' });
+      }
     }
-    return { ...p, score };
+    return { ...p, score, matches };
   });
 
   scored.sort((a, b) => {

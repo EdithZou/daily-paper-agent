@@ -44,7 +44,9 @@ async function processOne(sub, now, env) {
 
   if (sub.summary_lang !== 'none') {
     for (const p of top) {
-      p.aiSummary = await summarize(p, sub.summary_lang, env.ANTHROPIC_API_KEY);
+      const res = await summarize(p, sub.summary_lang, env.ANTHROPIC_API_KEY);
+      if (res?.ok) p.aiSummary = res.text;
+      else if (res?.error) p.aiError = res.error;
     }
   }
 
