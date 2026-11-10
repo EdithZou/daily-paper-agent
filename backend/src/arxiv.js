@@ -1,25 +1,43 @@
 const ENDPOINT = 'https://export.arxiv.org/api/query';
 const UA = 'daily-paper-agent/0.1 (mailto:tzouu2002@gmail.com)';
+const BACKOFFS_MS = [5000, 12000, 25000];
+const MAX_RETRY_AFTER_MS = 30000;
 
 export async function fetchArxivPapers(categories, maxResults = 100) {
   const query = categories.map((c) => `cat:${c}`).join('+OR+');
   const url = `${ENDPOINT}?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=${maxResults}`;
+  const totalAttempts = BACKOFFS_MS.length + 1;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let lastStatus = null;
+  for (let attempt = 0; attempt < totalAttempts; attempt++) {
     const r = await fetch(url, {
       headers: { 'User-Agent': UA, 'Accept': 'application/atom+xml' },
       cf: { cacheTtl: 600, cacheEverything: true },
     });
     if (r.ok) return parseAtom(await r.text());
-    if (r.status === 429 || r.status >= 500) {
-      const wait = 3000 * (attempt + 1);
-      console.warn(`arXiv ${r.status}, retry in ${wait}ms (attempt ${attempt + 1}/3)`);
-      await new Promise((res) => setTimeout(res, wait));
-      continue;
+    lastStatus = r.status;
+    if (r.status !== 429 && r.status < 500) {
+      throw new Error(`arXiv ${r.status} (non-retryable) for ${url}`);
     }
-    throw new Error(`arXiv ${r.status}`);
+    if (attempt === totalAttempts - 1) break;
+    const wait = resolveBackoff(r, attempt);
+    console.warn(`arXiv ${r.status}, retry in ${wait}ms (attempt ${attempt + 1}/${totalAttempts})`);
+    await new Promise((res) => setTimeout(res, wait));
   }
-  throw new Error('arXiv 429 after 3 retries');
+  throw new Error(`arXiv ${lastStatus} after ${totalAttempts} attempts for ${url}`);
+}
+
+function resolveBackoff(response, attempt) {
+  const retryAfter = response.headers.get('Retry-After');
+  if (retryAfter) {
+    const secs = Number(retryAfter);
+    if (Number.isFinite(secs) && secs > 0) {
+      return Math.min(secs * 1000, MAX_RETRY_AFTER_MS);
+    }
+  }
+  const base = BACKOFFS_MS[attempt];
+  const jitter = Math.floor(Math.random() * (base * 0.2));
+  return base + jitter;
 }
 
 function parseAtom(xml) {
